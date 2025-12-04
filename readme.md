@@ -32,13 +32,6 @@ The approach applies to both:
 
 ---
 
-## Example (Conceptual)
-
-Given tuples with numeric attributes, we can cluster them into blocks and then compute block-level aggregates:
-
-/\_/\  
-( o.o )
-
-> ^ <  
->  / \  
-> / \~~~~~
+|\__/,| (`\
+_.|o o |\_ ) )
+-(((---(((--------
