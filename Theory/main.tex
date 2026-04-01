@@ -8,6 +8,9 @@
 \usepackage{csquotes}
 \usepackage{listings}
 \usepackage{minted}
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage{mathtools}
 \usepackage[utf8]{inputenc}
 \usepackage[bb=boondox]{mathalfa}
 \usepackage{amsthm}
@@ -46,7 +49,7 @@
 \newcommand{\rrbracket}{]\!]}
 \makeatother
 \title{Block-level ( or Cluster-level) Possible-World Semantics in Relational Databases ( or Vector Databases)}
-\author{Aryak Sen \and Pratik Karmakar \and Silviu Maniu \and Pierre Senellart}
+% \author{Aryak Sen \and Pratik Karmakar \and Silviu Maniu \and Pierre Senellart}
 \date{\today}
 
 
@@ -121,7 +124,7 @@ Ensure that the choice of metric and $g$ makes $\kappa$ deterministic (e.g., fix
 
 \subsection{Block-world mapping and lifted block-level possible-world semantics}
 
-\begin{proposition}[Block-world mapping]
+\begin{proposition}[Block-world mapping]\label{prop:bw_mappings}
 Let $\mathcal{B} = \{B_1,\dots,B_m\}$ be a collection of blocks disjointly partitioning $\mathbf{X}$ such that
 \[
 \bigcup_{k=1}^m B_k = \mathbf{X}, \quad B_i\cap B_j=\varnothing\ \text{for }i\neq j,
@@ -256,5 +259,91 @@ which sends each tuple-level possible world $W\subseteq\mathbf{X}$ to the set $W
  \end{itemize}
  \end{remark}
 
+\paragraph{Example}
+We illustrate Proposition~\ref{prop:bw_mappings} on a tiny relation with four tuples.  
+Assume the tuples are partitioned into two semantic blocks:
+\[
+B_1=\{t_1,t_2\}, \qquad B_2=\{t_3,t_4\}.
+\]
+For simplicity, let the tuple annotations be independent Boolean provenance variables
+\[
+t_1:x_1,\quad t_2:x_2,\quad t_3:x_3,\quad t_4:x_4,
+\]
+and suppose the aggregate attribute is \texttt{salary} with values shown below.
+
+\begin{center}
+\begin{tabular}{cccc}
+\toprule
+Tuple & Block & Salary & Annotation \\
+\midrule
+$t_1$ & $B_1$ & $50$ & $x_1$ \\
+$t_2$ & $B_1$ & $70$ & $x_2$ \\
+$t_3$ & $B_2$ & $40$ & $x_3$ \\
+$t_4$ & $B_2$ & $30$ & $x_4$ \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Consider the query
+\[
+[\mathrm{SUM}(\texttt{salary}) > 100].
+\]
+
+At block level, we aggregate annotations and measure values inside each block:
+\[
+x^{(K)}_{B_1}=x_1 \oplus x_2,\qquad x^{(K)}_{B_2}=x_3 \oplus x_4,
+\]
+and
+\[
+x^{(M)}_{B_1}=50+70=120,\qquad x^{(M)}_{B_2}=40+30=70.
+\]
+
+The block-worlds are the subsets of $\{B_1,B_2\}$:
+\[
+\varnothing,\ \{B_1\},\ \{B_2\},\ \{B_1,B_2\}.
+\]
+For each block-world $V$, we evaluate the block-level aggregate and the comparison predicate
+\[
+\chi^b_{>}\!\left(\sum_{B\in V} x_B^{(M)},\,100\right).
+\]
+
+\begin{center}
+\begin{tabular}{>{\raggedright\arraybackslash}p{3cm}ccc}
+\toprule
+Block-world $V$ & Block sum & $\chi^b_{>}$ & Provenance contribution \\
+\midrule
+$\varnothing$ & $0$   & false & $0_K$ \\
+$\{B_1\}$     & $120$ & true  & $x^{(K)}_{B_1}\otimes \Phi^b_{\{B_1\}}$ \\
+$\{B_2\}$     & $70$  & false & $0_K$ \\
+$\{B_1,B_2\}$ & $190$ & true  & $x^{(K)}_{B_1}\otimes x^{(K)}_{B_2}\otimes \Phi^b_{\{B_1,B_2\}}$ \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Hence only the block-worlds $\{B_1\}$ and $\{B_1,B_2\}$ satisfy the predicate. Therefore the result annotation is
+\[
+[\mathrm{SUM}(\texttt{salary}) > 100]
+=
+\left(x^{(K)}_{B_1}\otimes \Phi^b_{\{B_1\}}\right)
+\oplus
+\left(x^{(K)}_{B_1}\otimes x^{(K)}_{B_2}\otimes \Phi^b_{\{B_1,B_2\}}\right).
+\]
+
+Substituting the block annotations gives
+\[
+[\mathrm{SUM}(\texttt{salary}) > 100]
+=
+\bigl((x_1\oplus x_2)\otimes \Phi^b_{\{B_1\}}\bigr)
+\oplus
+\bigl((x_1\oplus x_2)\otimes (x_3\oplus x_4)\otimes \Phi^b_{\{B_1,B_2\}}\bigr).
+\]
+
+This is exactly the lifted block-level view of the tuple-level possible worlds: instead of enumerating all tuple subsets of
+$\{t_1,t_2,t_3,t_4\}$, we enumerate only block subsets of $\{B_1,B_2\}$ and use block-level aggregate values.
+
+\paragraph{Interpretation.}
+Block $B_1$ alone already makes the predicate true because its total salary is $120>100$.
+Block $B_2$ alone does not, since $70 \not> 100$.
+Thus the semantics cleanly separates the aggregate test from the provenance mass carried by each block.
 
 \end{document}
