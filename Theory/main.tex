@@ -60,7 +60,72 @@
 
 \section{Introduction}
 
-We present a possible-world semantics for provenance of aggregate comparison in relational databases and later try to extend it to vector databases. We leverage block-level abstractions to handle tuple-level uncertainty efficiently, using semantic clustering of variables.
+Modern machine learning systems are increasingly trained, evaluated, 
+and deployed on data whose origins are difficult to trace. Training 
+examples may come from multiple datasets, web-scale crawls, weak 
+supervision pipelines, user interactions, synthetic data generated 
+by large language models, or several rounds of cleaning and transformation. 
+As a result, when a model performs well or poorly on a task, it is often 
+unclear which parts of the data are responsible for that performance. 
+In other words, we may observe the final utility of a model, but we do 
+not have a principled account of the provenance of that utility.
+
+This lack of provenance is particularly problematic for explainability. 
+Standard explanations usually focus on the model or on individual input 
+features: they explain why a specific prediction was made, or which features 
+influenced that prediction. However, they often do not explain where the 
+relevant evidence came from, which groups of training or evaluation records 
+supported the observed behavior, or how uncertainty in the underlying data 
+propagates to the final performance measure. This becomes even more important 
+when the data itself is uncertain, automatically generated, deduplicated, 
+clustered, or retrieved through vector search. In such settings, explanations 
+at the level of individual tuples may be too fine-grained, unstable, or computationally expensive.
+
+The goal of this project is to develop a block-level provenance framework 
+for explaining aggregate behavior in relational and vector databases, with 
+machine learning performance as a motivating application. Instead of assigning 
+provenance only to individual tuples, we group tuples into semantically 
+meaningful blocks and reason over possible worlds at the block level. 
+A block may represent a cluster of similar examples, a group of records 
+coming from a common source, a semantic region in an embedding space, or 
+a task-specific collection of examples that jointly influence a model's 
+performance. This gives a compact and interpretable abstraction: rather 
+than asking which individual tuples contributed to an aggregate outcome, 
+we can ask which blocks of data were responsible.
+
+A central feature of this approach is that the blocks need not be fixed 
+independently of the task. For a chosen machine learning task, we can 
+construct the blocks by selecting an appropriate embedding map and 
+clustering or assignment function. For example, if the task is image 
+classification, the embedding may capture visual or class-level similarity; 
+if the task is text classification, it may come from sentence or document 
+embeddings; if the task is regression or time-series forecasting, it may 
+encode numerical, temporal, or domain-specific features. Thus, the choice 
+of embedding becomes part of the explanation mechanism: by choosing an 
+embedding that reflects the relevant notion of similarity for the task, 
+the resulting blocks provide a meaningful provenance abstraction for the 
+observed performance.
+
+This perspective connects provenance, uncertainty, and representation 
+learning. The database provides the formal machinery for possible-world 
+semantics and aggregate provenance, while the embedding space provides a 
+task-aware way to define the units of explanation. Block-level provenance 
+can therefore serve two purposes at once. First, it reduces the complexity 
+of tuple-level possible-world reasoning by lifting the semantics to blocks. 
+Second, it produces explanations that are closer to how practitioners 
+reason about data: performance is often affected not by a single record, 
+but by a group of related records, a data source, a semantic cluster, or 
+a region of the input distribution.
+
+We present a possible-world semantics for provenance of aggregate comparisons 
+in relational databases and then consider its extension to vector databases. 
+The main idea is to use block-level abstractions to handle tuple-level uncertainty 
+efficiently, while preserving a formal connection to the underlying tuple-level 
+possible worlds. These blocks are obtained through deterministic semantic 
+partitioning of variables, using an embedding function and a clustering or 
+nearest-neighbor assignment method. The resulting framework allows us to explain 
+aggregate outcomes, and eventually machine learning performance measures, 
+in terms of the provenance of semantically meaningful blocks of data.
 
 \subsection{Semantic Partitioning of Variables}
 
@@ -345,5 +410,86 @@ $\{t_1,t_2,t_3,t_4\}$, we enumerate only block subsets of $\{B_1,B_2\}$ and use 
 Block $B_1$ alone already makes the predicate true because its total salary is $120>100$.
 Block $B_2$ alone does not, since $70 \not> 100$.
 Thus the semantics cleanly separates the aggregate test from the provenance mass carried by each block.
+
+\paragraph{Example: non-monotone aggregate comparison}
+We now illustrate the same block-level construction for 
+a non-monotone query.
+Consider again the relation with two semantic blocks:
+\[
+B_1=\{t_1,t_2\}, \qquad B_2=\{t_3,t_4\},
+\]
+with tuple annotations
+\[
+t_1:x_1,\quad t_2:x_2,\quad t_3:x_3,\quad t_4:x_4.
+\]
+
+Consider the query
+\[
+[\mathrm{SUM}(\texttt{salary}) < 100].
+\]
+
+This query is non-monotone: adding more tuples or blocks 
+can make a previously true query become false.
+
+At block level, the annotations and aggregate values are
+\[
+x^{(K)}_{B_1}=x_1 \oplus x_2,\qquad 
+x^{(K)}_{B_2}=x_3 \oplus x_4,
+\]
+and
+\[
+x^{(M)}_{B_1}=50+70=120,\qquad 
+x^{(M)}_{B_2}=40+30=70.
+\]
+
+The block-worlds are the subsets of $\{B_1,B_2\}$:
+\[
+\varnothing,\ \{B_1\},\ \{B_2\},\ \{B_1,B_2\}.
+\]
+
+For each block-world $V$, we evaluate
+\[
+\chi^b_{<}\!\left(\sum_{B\in V} x_B^{(M)},\,100\right).
+\]
+
+\begin{center}
+\begin{tabular}{>{\raggedright\arraybackslash}p{3cm}ccc}
+\toprule
+Block-world $V$ & Block sum & $\chi^b_{<}$ & Provenance contribution \\
+\midrule
+$\varnothing$ & $0$   & true  & $\Phi^b_{\varnothing}$ \\
+$\{B_1\}$     & $120$ & false & $0_K$ \\
+$\{B_2\}$     & $70$  & true  & $x^{(K)}_{B_2}\otimes \Phi^b_{\{B_2\}}$ \\
+$\{B_1,B_2\}$ & $190$ & false & $0_K$ \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Hence the satisfying block-worlds are $\varnothing$ and $\{B_2\}$. Therefore,
+\[
+[\mathrm{SUM}(\texttt{salary}) < 100]
+=
+\Phi^b_{\varnothing}
+\oplus
+\left(x^{(K)}_{B_2}\otimes \Phi^b_{\{B_2\}}\right).
+\]
+
+Substituting the block annotation for $B_2$ gives
+\[
+[\mathrm{SUM}(\texttt{salary}) < 100]
+=
+\Phi^b_{\varnothing}
+\oplus
+\left((x_3\oplus x_4)\otimes \Phi^b_{\{B_2\}}\right).
+\]
+
+\paragraph{Interpretation.}
+The query is satisfied when no block is present, since 
+the sum is $0<100$, and it is also satisfied when only 
+$B_2$ is present, since $70<100$. However, once $B_1$ 
+is present, either alone or together with $B_2$, the 
+sum becomes at least $120$ and the predicate becomes false. 
+This demonstrates the non-monotonicity of less-than aggregate 
+comparisons: adding more data can invalidate the query result.
 
 \end{document}
